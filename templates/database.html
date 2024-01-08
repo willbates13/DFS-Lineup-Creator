@@ -1,0 +1,320 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Large Table Editing</title>
+    <link rel="stylesheet" type="text/css" href="https://cdn.datatables.net/1.13.7/css/jquery.dataTables.min.css">
+    <link rel="stylesheet" href="https://stackpath.bootstrapcdn.com/bootstrap/4.3.1/css/bootstrap.min.css">
+    <link rel="stylesheet" href="https://cdn.datatables.net/1.10.24/css/dataTables.bootstrap4.min.css">
+    <script type="text/javascript" charset="utf8" src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+    <script>
+        document.addEventListener('DOMContentLoaded', function () {
+            // Function to calculate percentage ownership for each player
+            function calculatePercentageOwnership() {
+                // Get the table element
+                var table = document.getElementById('dataTable');
+
+                // Initialize ownership data
+                var ownershipData = {};
+                var totalLineups = table.rows.length - 1; // Exclude the header row
+
+                // Iterate over the table rows
+                for (var i = 1; i < table.rows.length; i++) {
+                    // Iterate over the table columns starting from the second column (index 1)
+                    for (var j = 1; j < table.rows[i].cells.length - 1; j++) {
+                        var playerCell = table.rows[i].cells[j];
+                        var playerName = playerCell.textContent.trim();
+
+                        // Update ownership count for the player
+                        ownershipData[playerName] = (ownershipData[playerName] || 0) + 1;
+                    }
+                }
+
+                // Get the percentage ownership for each player
+                var percentageOwnershipData = [];
+                for (var player in ownershipData) {
+                    if (ownershipData.hasOwnProperty(player)) {
+                        var ownershipPercentage = (ownershipData[player] / totalLineups) * 100;
+                        percentageOwnershipData.push({ player: player, ownershipPercentage: ownershipPercentage.toFixed(2) });
+                    }
+                }
+
+                // Sort the percentageOwnershipData array by ownershipPercentage (highest to lowest)
+                percentageOwnershipData.sort(function (a, b) {
+                    return b.ownershipPercentage - a.ownershipPercentage;
+                });
+
+                // Clear existing table content
+                var percentageTableBody = document.querySelector('#percentageOwnershipTable tbody');
+                percentageTableBody.innerHTML = '';
+
+                // Populate the percentage ownership table
+                percentageOwnershipData.forEach(function (data) {
+                    var row = `<tr><td>${data.player}</td><td>${data.ownershipPercentage}%</td></tr>`;
+                    percentageTableBody.insertAdjacentHTML('beforeend', row);
+                });
+            }
+
+            calculatePercentageOwnership()
+            document.querySelectorAll('.remove-lineup').forEach(function (button) {
+                button.addEventListener('click', function () {
+                    var lineupId = button.getAttribute('data-lineup-id');
+
+                    fetch(`/remove_lineup/${lineupId}`, {
+                        method: 'DELETE',
+                    })
+                    .then(response => {
+                        if (!response.ok) {
+                            throw new Error('Network response was not ok');
+                        }
+                        return response.json();
+                    })
+                    .then(data => {
+                        button.closest('tr').remove();
+                        alert(data.message);
+                        location.reload();
+                          // Display success message
+                    })
+                    .catch(error => {
+                        console.error('Error removing lineup:', error);
+                        alert('Error removing lineup. Please try again.');
+                    });
+
+                })
+
+            })
+
+            // Add an event listener for the "Export to CSV" button
+            document.getElementById('export-csv').addEventListener('click', function () {
+                exportToCSV();
+            });
+
+            function exportToCSV() {
+                 // Get the table element
+                 var table = document.getElementById('dataTable_ids');
+
+                 // Extract column headers (excluding the ID column)
+                 var headers = Array.from(table.querySelectorAll('thead th'))
+                     .map(header => header.textContent.trim())
+                     .filter(header => header.toLowerCase() !== 'id');
+
+                 // Extract table rows
+                 var rows = Array.from(table.querySelectorAll('tbody tr')).map(row => {
+                     return Array.from(row.querySelectorAll('td'))
+                         .filter((cell, index) => index !== 0)  // Exclude the last cell (Remove button column)
+                         .map(cell => cell.textContent.trim());
+                 });
+
+                 // Combine headers and rows into a CSV string
+                 var csvContent = headers.join(',') + '\n';
+                 csvContent += rows.map(row => row.join(',')).join('\n');
+
+                 // Create a Blob and initiate a download
+                 var blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+                 var link = document.createElement('a');
+                 link.href = URL.createObjectURL(blob);
+                 link.setAttribute('download', 'exported_data.csv');
+                 document.body.appendChild(link);
+                 link.click();
+                 document.body.removeChild(link);
+             }
+
+        });
+    </script>
+    <style>
+    body {
+        margin: 0;
+        padding: 0;
+        font-size: 16px;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        height: 100vh;
+        background-color: #f8f9fa;
+    }
+
+    nav {
+        background-color: #343a40; /* Dark grey background color */
+        color: white;
+        padding: 10px;
+        text-align: center;
+        width: 100%;
+        position: fixed;
+        top: 0;
+        z-index: 1000;
+    }
+
+    nav a {
+        display: inline-block;
+        padding: 5px 10px;
+        margin: 0 10px;
+        text-decoration: none;
+        color: white;
+        transition: background-color 0.3s, color 0.3s;
+    }
+
+    nav a:hover {
+        background-color: #007bff; /* Dark blue hover color */
+    }
+
+    nav a:focus {
+        outline: none;
+    }
+
+    nav a:active {
+        background-color: #0056b3; /* Darker blue active color */
+    }
+
+        #container {
+            display: flex;
+            flex-direction: row;
+            width: 90%;
+            margin-top: 80px; /* Add margin at the top of the container */
+        }
+
+        #left-container {
+            flex: 0 0 75%;
+            display: flex;
+            flex-direction: column; /* Stack tables vertically */
+            margin-right: 20px; /* Add margin between containers */
+        }
+
+        #right-container {
+            flex: 0 0 25%;
+            max-height: 80vh; /* Set the maximum height */
+            overflow-y: auto; /* Add vertical scroll if content exceeds the maximum height */
+        }
+
+
+        #dataTable {
+            width: 100%;
+            font-size: 10px;
+            background-color: #f2f2f2; /* Light gray background */
+            border: 1px solid #ddd; /* Light border color */
+            border-collapse: collapse; /* Collapse border spacing */
+            margin-bottom: 20px; /* Add margin between tables */
+
+        }
+
+        #dataTable th,
+        #dataTable td {
+            padding: 5px; /* Add padding to cells */
+            text-align: left; /* Align text to the left */
+            border: 1px solid #ddd; /* Light border color */
+        }
+
+        .custom-table {
+            width: 100%;
+            font-size: 10px;
+            background-color: #f2f2f2; /* Light gray background */
+            border: 1px solid #ddd; /* Light border color */
+            border-collapse: collapse; /* Collapse border spacing */
+            margin-bottom: 20px; /* Add margin between tables */
+        }
+
+        .custom-table th,
+        .custom-table td {
+            padding: 5px; /* Add padding to cells */
+            text-align: left; /* Align text to the left */
+            border: 1px solid #ddd; /* Light border color */
+        }
+
+        #percentageOwnershipTable {
+            width: 100%;
+            font-size: 10px;
+            background-color: #e6f7ff; /* Light blue background for ownership table */
+            border: 1px solid #b3d9ff; /* Light border color for ownership table */
+            border-collapse: collapse; /* Collapse border spacing for ownership table */
+        }
+
+        #percentageOwnershipTable th,
+        #percentageOwnershipTable td {
+            padding: 5px;
+            text-align: left; /* Align text to the left for ownership table */
+            border: 1px solid #b3d9ff; /* Light border color for ownership table */
+        }
+    </style>
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+</head>
+
+<body>
+
+    <nav>
+        <a href="/">Build</a>
+        <a href="/database">Lineups</a>
+    </nav>
+
+    <div id="container">
+        <div id="left-container">
+            <div class="table-container">
+                <table id="dataTable" class="class="display custom-table" style="width:100%;">
+                    <thead>
+                        <tr>
+                            {% for key in database[0].keys() %}
+                                <th>{{ key }}</th>
+                            {% endfor %}
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for record in database %}
+                            <tr>
+                                {% for value in record.values() %}
+                                    <td>{{ value }}</td>
+                                {% endfor %}
+                                <td><button class="remove-lineup" data-lineup-id="{{ record['id'] }}">Remove</button></td>
+                            </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+
+            </div>
+
+            <div class="table-container">
+                <table id="dataTable_ids" class="display custom-table" style="width:100%;">
+                    <thead>
+                        <tr>
+                            {% for key in ids[0].keys() %}
+                                <th>{{ key }}</th>
+                            {% endfor %}
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for record in ids %}
+                            <tr>
+                                {% for value in record.values() %}
+                                    <td>{{ value }}</td>
+                                {% endfor %}
+                            </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            <button id="export-csv">Export to CSV</button>
+            <form id="removeLineups" action="remove_all" method="post">
+                <input type="hidden" id="removeLineups" name="removeLineups">
+                <button class="btn btn-primary" type="submit">Reset</button>
+            </form>
+            </div>
+        </div>
+
+        <div id="right-container">
+            <!-- Percentage ownership table -->
+            <table id="percentageOwnershipTable" class="display custom-table">
+                <thead>
+                    <tr>
+                        <th>Player</th>
+                        <th>Percentage Ownership</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <!-- Table content will be dynamically added using JavaScript -->
+                </tbody>
+            </table>
+
+        </div>
+    </div>
+</body>
+
+</html>

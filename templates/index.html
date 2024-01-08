@@ -1,0 +1,672 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Large Table Editing</title>
+    <link rel="stylesheet" type="text/css" href="https://cdn.datatables.net/1.13.7/css/jquery.dataTables.min.css">
+    <link rel="stylesheet" href="https://stackpath.bootstrapcdn.com/bootstrap/4.3.1/css/bootstrap.min.css">
+    <link rel="stylesheet" href="https://cdn.datatables.net/1.10.24/css/dataTables.bootstrap4.min.css">
+    <script type="text/javascript" charset="utf8" src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+    <script type="text/javascript" charset="utf8" src="https://cdn.datatables.net/1.13.7/js/jquery.dataTables.min.js"></script>
+    <script src="https://stackpath.bootstrapcdn.com/bootstrap/4.3.1/js/bootstrap.min.js"></script>
+    <script src="https://stackpath.bootstrapcdn.com/bootstrap/4.3.1/js/bootstrap.bundle.min.js"></script>
+    <script src="https://cdn.datatables.net/1.10.24/js/dataTables.bootstrap4.min.js"></script>
+    <script>
+        var selectedRows = [];
+        var selectedRow;
+        var initialData;
+        $(document).ready(function () {
+            function getRandomColor() {
+                var letters = '0123456789ABCDEF';
+                var color = '#';
+                for (var i = 0; i < 6; i++) {
+                    color += letters[Math.floor(Math.random() * 16)];
+                }
+                return color;
+            }
+            // Define color mappings for each Game Info value
+            // Retrieve unique values in the "Game Info" column
+            var gameInfoValues = [];
+            $('#dataTable tbody tr').each(function () {
+                var gameInfo = $(this).find('td:eq(2)').text().trim().split(' ')[0];
+                if (!gameInfoValues.includes(gameInfo)) {
+                    gameInfoValues.push(gameInfo);
+                }
+            });
+
+            // Generate random colors for each unique Game Info value
+            var gameInfoColors = {};
+            gameInfoValues.forEach(function (value) {
+                var randomColor = getRandomColor();
+                gameInfoColors[value] = randomColor;
+            });
+            var positionColors = {
+                'QB': '#FFB6C1',
+                'RB': '#87CEEB',
+                'WR': '#98FB98',
+                'TE': '#FFDAB9',
+                'DST': '#FFA07A',
+            };
+
+
+            // DataTable initialization for the data table
+            var dataTable = $('#dataTable').DataTable({
+                pageLength: 100, // Set the default number of rows per page
+                order: [[4, 'desc']],
+
+                columnDefs: [
+                    {
+                        targets: '_all', // Apply to all columns
+                        render: function (data, type, row, meta) {
+                            // Check if the data is numeric and not null
+                            if ($.isNumeric(data) && data !== null) {
+                                // Format numeric data to two decimal places
+                                return parseFloat(data).toFixed(2);
+                            }
+                            return data; // Return the data as is if not numeric
+                        },
+                    },
+                ],
+            });
+
+            // Function to update total salary based on selected boxes
+            function updateTotalSums() {
+                // Apply colors to each box-column based on Game Info
+                $('.box-column[data-column="Game Info"]').each(function () {
+                    var gameInfo = $(this).text().trim();
+                    var color = gameInfoColors[gameInfo]; // Default to a random color if not found
+                    $(this).css('background-color', color);
+                });
+                $('.box-column[data-column="Position"]').each(function () {
+                    var gameInfo = $(this).text().trim();
+                    var color = positionColors[gameInfo];
+                    $(this).css('background-color', color);
+                });
+
+                // Initialize total sums
+                var totalOwnership = 0;
+                var totalProjected = 0;
+                var totalVariance = 0;
+                var totallogOwnership = 0;
+                var totalSalary = 0;
+
+                // Iterate over the selected boxes and sum the values
+                $('.box').each(function () {
+                    var ownership = parseFloat($(this).find('.box-column[data-column="Ownership"]').text()) || 0;
+                    var projected = parseFloat($(this).find('.box-column[data-column="Projected"]').text()) || 0;
+                    var variance = parseFloat($(this).find('.box-column[data-column="Variance"]').text()) || 0;
+                    var salary = parseInt($(this).find('.box-column[data-column="Salary"]').text()) || 0;
+
+                    totalSalary += salary;
+
+                    totalOwnership += ownership;
+                    totalProjected += projected;
+                    totalVariance += variance;
+                    // Check for zero or negative ownership before taking the logarithm
+                    if (ownership > 0) {
+                        totallogOwnership += Math.log(ownership);
+                    } else {
+                        // Handle the case where ownership is zero or negative
+                        totallogOwnership += 0;
+                    }
+
+                });
+
+                $('.box.selected').each(function () {
+                    var selected_salary = parseInt($(this).find('.box-column[data-column="Salary"]').text()) || 0;
+
+
+                    $('#dataTable tbody tr').each(function () {
+                        var rowSalary = parseFloat($(this).find('td:eq(4)').text().replace(/[^\d.-]/g, '')) || 0;
+
+                        // Apply red color to text if salary is greater than the maximum value
+                        if ((rowSalary + (totalSalary - selected_salary)) > 50000) {
+                            $(this).find('td').css('color', 'red');
+                        } else {
+                            // Reset the color to default if salary is within the allowed range
+                            $(this).find('td').css('color', '');  // Empty string resets to default
+                        }
+                    });
+                });
+
+                // Calculate remaining salary
+                var remainingSalary = 50000 - totalSalary;
+
+                // Highlight the Total Salary box based on conditions
+                var totalSalaryBox = $('.box[data-value="TotalSalary"]');
+                if (totalSalary > 50000 || remainingSalary < 0) {
+                    totalSalaryBox.css('background-color', 'red');
+                } else {
+                    // green color if conditions are not met
+                    totalSalaryBox.css('background-color', '#98FB98');
+                }
+
+                // Update the content of the total sum boxes
+                $('.box[data-value="TotalSalary"] .box-column').text(`Total Salary: ${totalSalary}`);
+
+                // Update the content of the total sum boxes
+                $('.box[data-value="TotalOwnership"] .box-column').text(`Total Ownership: ${parseFloat(totalOwnership ).toFixed(2)}`);
+                $('.box[data-value="TotalProjected"] .box-column').text(`Total Projected: ${parseFloat(totalProjected).toFixed(2)}`);
+                $('.box[data-value="TotalVariance"] .box-column').text(`Total Variance: ${parseFloat(totalVariance).toFixed(2)}`);
+                $('.box[data-value="logsumOwnership"] .box-column').text(`Log Sum Ownership: ${parseFloat(totallogOwnership).toFixed(2)}`);
+
+            }
+
+
+            // Click event listener for the boxes
+            $('.box').click(function () {
+                $('.box').removeClass('selected');
+                $(this).addClass('selected');
+
+                // Get the value associated with the selected box
+                var selectedValue = $(this).data('value');
+
+                // Filter the data table based on the selected value and exclude selectedRows
+                if (selectedValue === 'FLEX') {
+                    dataTable.columns(3).search('WR|RB|TE', true, false, 3).draw();
+                } else {
+                    dataTable.columns(3).search(selectedValue, false, false, 3).draw();
+                }
+
+                // Update total salary based on selected boxes
+                updateTotalSums();
+            });
+
+            initialData = dataTable.rows().data().toArray();
+
+            // Click event listener for the rows in the main data table
+            $('#dataTable tbody').on('click', 'tr', function () {
+
+                var selectedBox = $('.box.selected');
+
+                if (selectedBox.length > 0) {
+                    // Get the data from the clicked row in the data table
+                    var rowData = dataTable.row(this).data();
+
+                    // Update the content of the selected box
+                    selectedBox.find('.box-column[data-column="Name"]').text(`${rowData[0]}`);
+                    selectedBox.find('.box-column[data-column="Team"]').text(`${rowData[1]}`);
+                    selectedBox.find('.box-column[data-column="Game Info"]').text(`${rowData[2]}`.split(' ')[0]);
+                    selectedBox.find('.box-column[data-column="Position"]').text(`${rowData[3]}`);
+                    selectedBox.find('.box-column[data-column="Salary"]').text(`${rowData[4]}`);
+                    selectedBox.find('.box-column[data-column="Projected"]').text(parseFloat(rowData[5]).toFixed(2));
+                    selectedBox.find('.box-column[data-column="Variance"]').text(parseFloat(rowData[6]).toFixed(2));
+                    selectedBox.find('.box-column[data-column="Ownership"]').text(parseFloat(rowData[7]).toFixed(2));
+
+                    // Unselect the previous row if the box already has content
+                    if (selectedRow) {
+                        selectedRow.removeClass('selected');
+                    }
+
+                    // Highlight the new row
+                    selectedRow = $(this);
+                    selectedRow.addClass('selected');
+
+                    // Add the selected row to the array
+                    selectedRows.push(selectedRow.index());
+
+
+                    // Select all values within the paths box -> box-row -> box-column where data-column is 'Name'
+                    var selectedPlayers = $('.box-column[data-column="Name"]').map(function () {
+                        return $(this).text();
+                    }).get();
+
+
+                    //redraw data table with initial content, then remove selected players every click.
+                    function redrawDataTable() {
+                        dataTable.clear().rows.add(initialData).draw();
+                    }
+                    redrawDataTable();
+                    // Remove rows from the DataTable based on selected players
+                    for (var i = 0; i < selectedPlayers.length; i++) {
+                        var playerName = selectedPlayers[i];
+                        // Find the row indices that correspond to the selected player's name
+                        var rowIndexes = dataTable.rows().eq(0).filter(function (rowIdx) {
+                            return dataTable.cell(rowIdx, 0).data() === playerName;
+                        });
+
+                        // Remove the rows from the DataTable
+                        dataTable.rows(rowIndexes).remove();
+                    }
+
+                    // Draw the updated DataTable
+                    dataTable.draw();
+
+                    // Set the value of the hidden input field with the selected lineup
+                    $('#selectedLineup').val(selectedPlayers.join(','));
+
+
+                } else {
+                    alert('Please select a box first.');
+                }
+                // Update total salary based on selected boxes
+                updateTotalSums();
+            });
+        });
+    </script>
+    <style>
+        body {
+            margin: 0;
+            padding: 0;
+            font-size: 16px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            height: 100vh;
+            background-color: #f8f9fa;
+        }
+
+        nav {
+            background-color: #333;
+            color: white;
+            padding: 10px;
+            text-align: center;
+            width: 100%;
+            position: fixed;
+            top: 0;
+            z-index: 1000;
+        }
+
+        nav a {
+            display: inline-block;
+            padding: 5px 10px;
+            margin: 0 10px;
+            text-decoration: none;
+            color: white;
+            transition: background-color 0.3s, color 0.3s;
+        }
+
+        nav a:hover {
+            background-color: #007bff;
+        }
+
+        nav a:focus {
+            outline: none;
+        }
+
+        nav a:active {
+            background-color: #0056b3;
+        }
+
+        #container {
+            display: flex;
+            flex-direction: row;
+            width: 95%;
+            max-height: 90vh;
+            margin-top: 40px;
+
+        }
+
+        #dataTableContainer {
+            flex: 1;
+            max-height: 100vh;
+            overflow-y: scroll;
+            padding: 10px;
+            box-sizing: border-box;
+        }
+
+        #dataTable {
+            width: 100%;
+            font-size: 12px;
+            background-color: #fff;
+            border: 1px solid #dee2e6;
+            border-radius: 5px;
+            box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
+        }
+
+        #dataTable th,
+        #dataTable td {
+            max-width: 100px;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+
+        #boxContainer {
+        width: 50%;
+        padding: 20px;
+        overflow-y: auto;
+        display: flex;
+        flex-direction: column;
+
+        }
+        .box-headers {
+            padding: 5px;
+            width: 100%;
+            border: 3px solid #4A4A4A;
+            background-color: #888888;
+            text-align: center;
+            border-radius: 20px;
+            font-weight: bold;
+            margin-bottom: 10px;
+        }
+
+        .box {
+            width: 100%;
+            padding: 5px;
+            margin-bottom: 5px;
+            border: 1px solid #D3D3D3;
+            cursor: pointer;
+            background-color: #D3D3D3;
+            border-radius: 20px;
+            text-align: center;
+        }
+
+        .box.selected {
+            background-color: #E5E5E5; /* Darker grey for the selected box */
+        }
+
+        .box-row {
+            width: 100%;
+            display: flex;
+            align-items: center;
+        }
+
+        .box-column {
+            width: 14%;
+            box-sizing: border-box;
+            border: 1px solid #D3D3D3;
+            padding: 4px;
+            margin-right: 6px;
+            border-radius: 15px;
+            font-size: 10px;
+            align-items: center;
+            flex-wrap: wrap;
+        }
+
+        .box-label {
+            padding: 1px;
+            font-size: 12px;
+        }
+
+        .horizontal-box {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .horizontal-box .box {
+            width: 100%;
+        }
+
+        .horizontal-box .box {
+            background-color: #BABABA;
+            border: 2px solid #4A4A4A;
+        }
+
+        .horizontal-box .box-column {
+            border: 2px solid #BABABA;
+        }
+
+        .horizontal-box .box {
+            width: calc(25% - 10px);
+        }
+        .box-column[data-column="Game Info"] {
+            /* No specific styling here; colors will be applied dynamically with JavaScript */
+        }
+        .box-column[data-column="Position"] {
+            /* No specific styling here; colors will be applied dynamically with JavaScript */
+        }
+        .horizontal-box .box-column {
+            width: 100%;
+        }
+        .box-headers .box-column{
+            border: 2px solid #4A4A4A;
+            background-color: #B8B8B8
+        }
+
+        .navbar-title {
+            font-size: 20px; /* Adjust the font size as needed */
+            color: #FFD700; /* Change this color to the desired color for the title */
+
+        }
+        }
+
+    </style>
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Lineup Builder</title>
+</head>
+
+
+<body>
+        {% with messages = get_flashed_messages(with_categories=true) %}
+        {% if messages %}
+        {% for category, message in messages %}
+            <div class="alert alert-{{ category }}">
+            {{ message }}
+            </div>
+        {% endfor %}
+        {% endif %}
+    {% endwith %}
+
+    <nav>
+        <a href="/">Build</a>
+        <a href="/database">Lineups</a>
+    </nav>
+
+    <div id="container">
+        <div id="boxContainer">
+            <div class="box-headers">
+                <div class="box-row">
+                    <div class="box-column">Name</div>
+                    <div class="box-column">Position</div>
+                    <div class="box-column">Team</div>
+                    <div class="box-column">Game Info</div>
+                    <div class="box-column">Salary</div>
+                    <div class="box-column">Projected</div>
+                    <div class="box-column">Variance</div>
+                    <div class="box-column">Ownership</div>
+                </div>
+            </div>
+            <div class="box" data-value="QB">
+                <div class="box-label">QB</div>
+                <div class="box-content">
+                    <div class="box-row">
+                        <div class="box-column" data-column="Name"></div>
+                        <div class="box-column" data-column="Position"></div>
+                        <div class="box-column" data-column="Team"></div>
+                        <div class="box-column" data-column="Game Info"></div>
+                        <div class="box-column" data-column="Salary"></div>
+                        <div class="box-column" data-column="Projected"></div>
+                        <div class="box-column" data-column="Variance"></div>
+                        <div class="box-column" data-column="Ownership"></div>
+                    </div>
+                </div>
+            </div>
+            <div class="box" data-value="RB">
+                <div class="box-label">RB</div>
+                <div class="box-content">
+                    <div class="box-row">
+                        <div class="box-column" data-column="Name"></div>
+                        <div class="box-column" data-column="Position"></div>
+                        <div class="box-column" data-column="Team"></div>
+                        <div class="box-column" data-column="Game Info"></div>
+                        <div class="box-column" data-column="Salary"></div>
+                        <div class="box-column" data-column="Projected"></div>
+                        <div class="box-column" data-column="Variance"></div>
+                        <div class="box-column" data-column="Ownership"></div>
+                    </div>
+                </div>
+            </div>
+            <div class="box" data-value="RB">
+                <div class="box-label">RB</div>
+                <div class="box-content">
+                    <div class="box-row">
+                        <div class="box-column" data-column="Name"></div>
+                        <div class="box-column" data-column="Position"></div>
+                        <div class="box-column" data-column="Team"></div>
+                        <div class="box-column" data-column="Game Info"></div>
+                        <div class="box-column" data-column="Salary"></div>
+                        <div class="box-column" data-column="Projected"></div>
+                        <div class="box-column" data-column="Variance"></div>
+                        <div class="box-column" data-column="Ownership"></div>
+                    </div>
+                </div>
+            </div>
+            <div class="box" data-value="WR">
+                <div class="box-label">WR</div>
+                <div class="box-content">
+                    <div class="box-row">
+                        <div class="box-column" data-column="Name"></div>
+                        <div class="box-column" data-column="Position"></div>
+                        <div class="box-column" data-column="Team"></div>
+                        <div class="box-column" data-column="Game Info"></div>
+                        <div class="box-column" data-column="Salary"></div>
+                        <div class="box-column" data-column="Projected"></div>
+                        <div class="box-column" data-column="Variance"></div>
+                        <div class="box-column" data-column="Ownership"></div>
+                    </div>
+                </div>
+            </div>
+            <div class="box" data-value="WR">
+                <div class="box-label">WR</div>
+                <div class="box-content">
+                    <div class="box-row">
+                        <div class="box-column" data-column="Name"></div>
+                        <div class="box-column" data-column="Position"></div>
+                        <div class="box-column" data-column="Team"></div>
+                        <div class="box-column" data-column="Game Info"></div>
+                        <div class="box-column" data-column="Salary"></div>
+                        <div class="box-column" data-column="Projected"></div>
+                        <div class="box-column" data-column="Variance"></div>
+                        <div class="box-column" data-column="Ownership"></div>
+                    </div>
+                </div>
+            </div>
+            <div class="box" data-value="WR">
+                <div class="box-label">WR</div>
+                <div class="box-content">
+                    <div class="box-row">
+                        <div class="box-column" data-column="Name"></div>
+                        <div class="box-column" data-column="Position"></div>
+                        <div class="box-column" data-column="Team"></div>
+                        <div class="box-column" data-column="Game Info"></div>
+                        <div class="box-column" data-column="Salary"></div>
+                        <div class="box-column" data-column="Projected"></div>
+                        <div class="box-column" data-column="Variance"></div>
+                        <div class="box-column" data-column="Ownership"></div>
+                    </div>
+                </div>
+            </div>
+            <div class="box" data-value="TE">
+                <div class="box-label">TE</div>
+                <div class="box-content">
+                    <div class="box-row">
+                        <div class="box-column" data-column="Name"></div>
+                        <div class="box-column" data-column="Position"></div>
+                        <div class="box-column" data-column="Team"></div>
+                        <div class="box-column" data-column="Game Info"></div>
+                        <div class="box-column" data-column="Salary"></div>
+                        <div class="box-column" data-column="Projected"></div>
+                        <div class="box-column" data-column="Variance"></div>
+                        <div class="box-column" data-column="Ownership"></div>
+                    </div>
+                </div>
+            </div>
+            <div class="box" data-value="FLEX">
+                <div class="box-label">FLEX</div>
+                <div class="box-content">
+                    <div class="box-row">
+                        <div class="box-column" data-column="Name"></div>
+                        <div class="box-column" data-column="Position"></div>
+                        <div class="box-column" data-column="Team"></div>
+                        <div class="box-column" data-column="Game Info"></div>
+                        <div class="box-column" data-column="Salary"></div>
+                        <div class="box-column" data-column="Projected"></div>
+                        <div class="box-column" data-column="Variance"></div>
+                        <div class="box-column" data-column="Ownership"></div>
+                    </div>
+                </div>
+            </div>
+            <div class="box" data-value="DST">
+                <div class="box-label">DST</div>
+                <div class="box-content">
+                    <div class="box-row">
+                        <div class="box-column" data-column="Name"></div>
+                        <div class="box-column" data-column="Position"></div>
+                        <div class="box-column" data-column="Team"></div>
+                        <div class="box-column" data-column="Game Info"></div>
+                        <div class="box-column" data-column="Salary"></div>
+                        <div class="box-column" data-column="Projected"></div>
+                        <div class="box-column" data-column="Variance"></div>
+                        <div class="box-column" data-column="Ownership"></div>
+                    </div>
+                </div>
+            </div>
+            <div class="horizontal-box">
+                <div class="box" data-value="TotalSalary">
+                    <div class="box-content">
+                        <div class="box-row">
+                            <div class="box-column" data-column="TotalSalary"></div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="box" data-value="TotalOwnership">
+                    <div class="box-content">
+                        <div class="box-row">
+                            <div class="box-column" data-column="TotalOwnership"></div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="box" data-value="TotalProjected">
+                    <div class="box-content">
+                        <div class="box-row">
+                            <div class="box-column" data-column="TotalProjected"></div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="box" data-value="TotalVariance">
+                    <div class="box-content">
+                        <div class="box-row">
+                            <div class="box-column" data-column="TotalVariance"></div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="box" data-value="logsumOwnership">
+                    <div class="box-content">
+                        <div class="box-row">
+                            <div class="box-column" data-column="logsumOwnership"></div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <form id="lineupForm" action="/lineups" method="post">
+                <input type="hidden" id="selectedLineup" name="selectedLineup">
+                <button class="btn btn-primary" type="submit">Add Lineup</button>
+            </form>
+        </div>
+        <div id="dataTableContainer">
+            {% if headers and rows %}
+                <table id="dataTable" class="display">
+                    <thead>
+                        <tr>
+                            {% for header in headers %}
+                                <th>{{ header }}</th>
+                            {% endfor %}
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for row in rows %}
+                            <tr>
+                                {% for col in row %}
+                                    <td>{{ col }}</td>
+                                {% endfor %}
+                            </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            {% else %}
+                <p>No data to display.</p>
+            {% endif %}
+        </div>
+    </div>
+</body>
+
+</html>
+
